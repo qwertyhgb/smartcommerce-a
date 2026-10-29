@@ -1,5 +1,7 @@
 # SmartCommerce AI
 
+[![CI](https://github.com/qwertyhgb/smartcommerce-a/actions/workflows/ci.yml/badge.svg)](https://github.com/qwertyhgb/smartcommerce-a/actions/workflows/ci.yml)
+
 Java 21 + Spring Boot 4.1.2 模块化单体电商后端，AI 售后能力分阶段接入。
 
 开发协作规则见 [AGENTS.md](AGENTS.md)。
