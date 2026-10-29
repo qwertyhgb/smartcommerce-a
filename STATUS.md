@@ -23,6 +23,7 @@
 ## 最近决策
 
 - 版本基线：`docs/adr/0000-technology-baseline.md`
+- MVP 范围：`docs/adr/0001-mvp-scope.md`（Accepted）
 - 进度账本：`docs/progress/README.md`
 - 计划快照：`docs/plan/`
 
