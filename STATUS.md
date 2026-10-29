@@ -7,7 +7,8 @@
 - 阶段：开工前准备；W1 于 2026-11-02 开始
 - 当前工单：无
 - 下一工单：SC-0101（2026-11-02，Must，1.5h）PRD 用户故事与不做范围
-- 最近完成：无（脚手架已完成，但不计入 238 工单）
+- 最近完成：baseline commit `8d2f48d`（脚手架，不计入 238 工单）
+- 远程仓库：https://github.com/qwertyhgb/smartcommerce-a （main）
 - 账本：`docs/progress/tickets.csv`（238 行，全部 TODO）
 - 今日记录：`docs/progress/daily/2026-10-29.md`
 - 阻塞：无
@@ -27,5 +28,5 @@
 
 ## 下一步
 
-1. 创建 baseline commit（当前所有脚手架）
-2. 2026-11-02 开始 SC-0101
+1. 2026-11-02 开始 SC-0101
+2. 每张工单按 AGENTS.md 更新 STATUS/daily/CSV 并提交
