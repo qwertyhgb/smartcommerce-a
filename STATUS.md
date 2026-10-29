@@ -16,7 +16,7 @@
 ## 环境
 
 - JDK 21.0.8；Maven Wrapper 3.9.12
-- CI：`.github/workflows/ci.yml`（push/PR 自动跑 `./mvnw test`）
+- CI：`.github/workflows/ci.yml`（push/PR 自动跑 + 手动触发 `./mvnw test`）
 - MySQL：`smartcommerce-mysql`，127.0.0.1:3306，healthy（8.4.11）
 - Redis / RabbitMQ / Qdrant：compose 已定义，未启动
 - 最近验证：2026-10-29 `./mvnw -B -ntp test` 通过（1 个测试，0 失败）
