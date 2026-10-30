@@ -6,7 +6,7 @@
 
 **开始**
 
-1. 读 `STATUS.md`、`docs/progress/tickets.csv` 中未完成项、`docs/progress/daily/` 最近 3 个文件。
+1. 读 `STATUS.md`、`docs/progress/tickets.csv` 中未完成项、`docs/progress/schedule-policy.md`、`docs/progress/daily/` 最近 3 个文件。
 2. 执行 `git log -10 --oneline`，确认最近提交。
 3. 对照 `docs/plan/SmartCommerce_AI_v2_Development_Manual_238_Days.md` 的当前工单，先向用户复述：当前周、当前工单、最近完成、阻塞、下一步、计划修改的文件。确认后再写代码。
 4. 不重复已完成工作；账本与代码/Git 不一致时，以代码、测试和 Git 为准并修正账本。
@@ -33,6 +33,15 @@
 - 新增或修改行为必须同步更新对应文档（ADR、API、DB、README）。
 - Must 用例失败时不得标记里程碑通过；可以延期 Should/Could，不能跳过 Must。
 - 遇到阻塞时记录原因、影响和下一步，不伪造“已完成”，不写空实现或 TODO 占位。
+
+## 2.1 排期与顺延
+
+- `docs/progress/tickets.csv` 的 `planned_date` 是建议日期，不是截止日期；按周结算 10h 项目预算。
+- 允许提前：前置依赖已完成且测试通过，可以领取下一张工单；不要跳过依赖。
+- 允许延后：Must 顺延到下周，`status=DEFERRED`，`notes` 写原因和计划周；不得伪造 `actual_done`。
+- 每周复盘一次；连续两周落后，按 ADR-0001 砍 Should/Could，不砍 Must、测试、鉴权、库存正确性。
+- 硬边界：W16 MVP（2027-02-21）和 2027-02 开始的实习投递。
+- 详细规则见 `docs/progress/schedule-policy.md`。
 
 ## 3. 不可破坏的约束
 
@@ -153,6 +162,7 @@ docs(adr): SC-0201 record catalog model decision
 | 工单账本 | `docs/progress/tickets.csv` |
 | 每日记录 | `docs/progress/daily/` |
 | 交接提示词 | `docs/progress/handoff-prompt.md` |
+| 排期规则 | `docs/progress/schedule-policy.md` |
 | 本地基础设施 | `infra/compose.yaml` |
 | 业务代码 | `src/main/java/com/example/smartcommerce/` |
 | 数据库迁移 | `src/main/resources/db/migration/` |

@@ -9,7 +9,7 @@
 - 下一工单：SC-0101（2026-11-02，Must，1.5h）PRD 用户故事与不做范围
 - 最近完成：baseline commit `8d2f48d`（脚手架，不计入 238 工单）
 - 远程仓库：https://github.com/qwertyhgb/smartcommerce-a （main）
-- 账本：`docs/progress/tickets.csv`（238 行，全部 TODO）
+- 账本：`docs/progress/tickets.csv`（238 行，18 列，全部 TODO）
 - 今日记录：`docs/progress/daily/2026-10-29.md`
 - 阻塞：无
 
@@ -25,6 +25,7 @@
 
 - 版本基线：`docs/adr/0000-technology-baseline.md`
 - MVP 范围：`docs/adr/0001-mvp-scope.md`（Accepted）
+- 排期规则：`docs/progress/schedule-policy.md`（`planned_date` 不是截止日期，支持 DEFERRED）
 - 进度账本：`docs/progress/README.md`
 - 计划快照：`docs/plan/`
 
