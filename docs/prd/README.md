@@ -1,7 +1,7 @@
 # SmartCommerce AI 产品需求（PRD）
 
 - 工单：SC-0101（Must，1.5h）
-- 状态：已定稿（2026-11-03；历经四轮评审：用户草稿查漏 → 手册契约对齐 → 深度评审 → 外部契约评审，修订记录见 §7）
+- 状态：已定稿（2026-11-03 定稿；2026-11-04 第五轮复核勘误已并入，修订记录见 §7.5）
 - 关联：`docs/adr/0001-mvp-scope.md`（W16 范围冻结）、开发手册第 0–6 章（重点：3.3 状态机、3.4 幂等、第 4 章 API 契约、5.4 工具授权）
 - 范围：三条核心用户故事 —— 下单、售后、订单查询。每条故事定义角色/触发、输入/输出、业务不变量、异常场景、验收用例，并明确订单写操作边界与 AI 边界
 - 约定：需求按 Must / Should / Could 标记；与 ADR-0001 冲突时以 ADR-0001 为准
@@ -17,14 +17,14 @@
 | SUPPORT | 客服，售后工单审核 |
 
 - 身份一律从 Spring Security 上下文解析；请求体/参数中的 userId 一律忽略。
-- 未认证请求由 Spring Security 过滤器拦截（401），不进入业务逻辑；401/403 响应须通过自定义 `AuthenticationEntryPoint`/`AccessDeniedHandler` 输出统一错误结构 `{code, message, requestId}`（实现归 SC-0104）。
+- 未认证请求由 Spring Security 过滤器拦截（401），不进入业务逻辑；401/403 响应须通过自定义 `AuthenticationEntryPoint`/`AccessDeniedHandler` 输出统一错误结构 `{code, message, requestId, details?}`（实现归 SC-0104）。
 - SUPPORT 对对象级授权：仅可读**关联了售后工单**（`after_sale_tickets`）的订单，禁止任意全量订单查询（防 `select * from orders where id=?` 式实现，见 3.1）。
 
 ### 0.2 幂等与错误契约
 
-- **面向用户的写接口**要求请求头 `Idempotency-Key`（推荐 UUID，≤ 64 字符）；服务端 `request_dedup` 表对 `(user_id, endpoint, idempotency_key)` 建唯一约束（对齐手册 3.4 与 3.1 表）。**系统间回调端点不适用**：`mock-payments/callback` 的调用方是"可信本地模拟器"、无用户身份，其幂等由状态机条件更新 + 回调序号保证（见 1.7 取舍 7），不走 `request_dedup`。
+- **面向终端账户（USER/SUPPORT/ADMIN）的写接口**要求请求头 `Idempotency-Key`（推荐 UUID，≤ 64 字符）；服务端 `request_dedup` 表对 `(user_id, endpoint, idempotency_key)` 建唯一约束（对齐手册 3.4 与 3.1 表）。**系统间回调端点不适用**：`mock-payments/callback` 的调用方是"可信本地模拟器"、无用户身份，其幂等由状态机条件更新 + 回调序号保证（见 1.7 取舍 7），不走 `request_dedup`。
 - **请求摘要**：对 `(endpoint, 规范化 JSON 请求体)` 计算 SHA-256 hex（`request_hash CHAR(64)`）。规范化 = 字段按字典序排列、null 与缺省字段统一、服务端忽略的字段（如客户端价格）不参与计算。**`endpoint` 记录路由模板**（如 `/api/v1/orders/{id}/cancel`），而非含资源 ID 的实际路径——否则同键不同订单可绕过幂等。
-- **同键同摘要**：重放返回**首次响应快照**（`response_ref` 存首次响应体，对齐手册 3.4"相同请求的重试返回同一业务结果"）；订单后续状态变化由前端凭 orderId 调详情接口获取。不引入"执行中"占位语义（手册 3.4 该项为可选项）——首个事务未提交时，并发方阻塞在 DB 唯一约束锁上，事务结束后按摘要重放或 409，锁等待超时返回 503 + 重试提示。
+- **同键同摘要**：重放返回**首次响应快照**（`response_ref` 存首次响应体，对齐手册 3.4"相同请求的重试返回同一业务结果"）；订单后续状态变化由前端凭 orderId 调详情接口获取。重放仅复用业务响应体，`requestId` 以**当前请求**生成为准（保证日志回放链路正确）。不引入"执行中"占位语义（手册 3.4 该项为可选项）——首个事务未提交时，并发方阻塞在 DB 唯一约束锁上，事务结束后按摘要重放或 409，锁等待超时返回 503 + 重试提示（**503 为团队决策显式声明**：手册 4.1 未列 503，语义为"服务暂时繁忙、可安全重试"）。
 - **同键不同摘要**：409 `IDEMPOTENCY_CONFLICT`。
 - **并发同键**：由 DB 唯一约束协调键的领用；插入撞唯一约束后，**必须以当前读（`SELECT ... FOR UPDATE`）或独立新事务读取 dedup 行判定摘要**——同事务先前的普通 SELECT 在 RR 隔离级别下是快照读，看不到对方刚提交的行，会导致误判 409 甚至重复建单。不得只靠内存 Map/锁保证跨实例正确性。
 - **首次失败后的重试**：幂等记录与业务写入在同一事务内提交，业务失败即回滚，同一键允许再次尝试并产生确定结果。
@@ -37,6 +37,19 @@
 - 时间统一 UTC 存储、API 用带时区 ISO8601 表示（手册第 0 章）。
 - **对外 ID 策略**：`skuId` = `products.sku_code`（字符串业务码）、`orderId` = 订单业务号（字符串，形如 `ord-xxx`），均对齐手册 4.2 示例；数据库自增主键不对外暴露（防顺序枚举）。内部关联（`order_items.sku_id` 等）落库用数值主键，由服务端经 `sku_code` 解析。
 - 表结构变更只走 Flyway；核心交易 SQL 用原生 MyBatis `#{}` 绑定；落库字段名对齐手册 3.1（如 `order_items.qty`、`after_sale_tickets.detail`），API DTO 字段名不受此约束。
+
+### 0.3.1 对手册 3.1 概念表的受控扩展清单（W2 建表依据）
+
+手册 3.1 是"概念字段清单"（其 241 行明确非完整 DDL）。以下扩展列源自 PRD 已承诺的输入/输出，W2（SC-0202/SC-0203）建表时一次落全，避免返工：
+
+| 表 | 扩展列 | PRD 依据 | 说明 |
+|---|---|---|---|
+| `orders` | `order_no` | 0.3 对外 ID 策略 | 字符串业务号 UNIQUE；自增 `id` 不对外 |
+| `orders` | `remark` | 1.2 输入 | VARCHAR(200) 可空；**落库而非删输入**（保持对用户草稿的承诺） |
+| `order_items` | `title_snapshot`, `image_snapshot` | 1.3 商品快照 | 取下单瞬间；快照语义不得改实时联查 |
+| `after_sale_tickets` | `type` | 2.2 输入 | MVP 仅 `REFUND_SIMULATED` |
+| `after_sale_tickets` | `active_order_key` | INV-A3 | STORED 生成列 + UNIQUE（NULL 不参与唯一性） |
+| `mock_payments` | `callback_seq` | 1.7 取舍 7 | 单调递增序号，SC-0902 建表 |
 
 ### 0.4 订单状态机（全局）
 
@@ -51,7 +64,15 @@ CREATED ──模拟支付回调(验签通过)──> PAID ──本人申请售
 - 库存回补只发生在"取消成功"这一条边上（见 INV-O7）；`REFUND_PENDING/REFUNDED` 的库存行为由售后规则显式决定（见 2.3 INV-A6），不得含糊地复用取消接口（手册 3.3）。
 - 重复回调、重复取消必须进自动回归测试（手册 3.3）。
 - 订单过期自动关单是手册 3.3 标注的 P2 扩展，不在 W16 Must，不引入额外终态（见 non-goals）。
-- **取消契约（手册第 4 章已有接口，行为在此约束）**：`POST /api/v1/orders/{id}/cancel`（USER+本人）；非本人订单 404、非 `CREATED` 状态 409 `ORDER_NOT_CANCELLABLE`、重复调用幂等（不重复回补库存，验收异常 6）；接口行为细化归 SC-1001。
+- **取消契约（手册第 4 章接口 `POST /api/v1/orders/{id}/cancel`，USER+本人）**——行为判定矩阵（消除"非 CREATED→409"与"重复调用幂等"的歧义；W10 取消与竞争测试断言以此为准，见 SC-1002/SC-1003；接口行为细化归 SC-1001）：
+
+| 条件 | 结果 |
+|---|---|
+| 本人 + `CREATED` | 200 取消成功：条件更新 → `CANCELLED`，回补库存并写 `inventory_ledger` 一条流水 |
+| 本人 + `CANCELLED` | 幂等成功（200 + 当前状态）；不回补、不写新流水（手册第 4 章"重复调用幂等"） |
+| 本人 + `PAID/REFUND_PENDING/REFUNDED` | 409 `ORDER_NOT_CANCELLABLE`（已进入支付/售后流程，不可取消） |
+| 非本人 / 订单不存在 | 404 |
+| 同 `Idempotency-Key` 重放 | 走 `request_dedup` 首次响应快照（0.2） |
 
 ## 1. 故事一：下单（多 SKU）— Must
 
@@ -80,7 +101,7 @@ CREATED ──模拟支付回调(验签通过)──> PAID ──本人申请售
 ### 1.4 业务不变量
 
 - **INV-O1 价格铁律**：实付金额永远由服务端按数据库价格 × 数量对全部 items 求和计算；客户端提交的价格字段不采信。
-- **INV-O2 不超卖**：库存扣减必须条件更新，affected rows = 0 即失败：
+- **INV-O2 不超卖**：库存扣减必须条件更新，affected rows = 0 即失败（SQL 中 `sku_id` 为内部数值主键，服务端先按 `sku_code` 解析 `internalSkuId` 再执行，见 0.3）：
 
 ```sql
 UPDATE inventory
@@ -131,7 +152,7 @@ WHERE sku_id = #{skuId} AND available >= #{quantity}
 4. 限购规则 → 移出 MVP；quantity 与 items 长度上限只是参数校验，不是业务限购。
 5. 地址模块 → 移出 MVP（手册 3.1 核心表与第 4 章 API 均无 address）：收货信息使用虚构演示静态数据，随订单快照保存；地址管理进 non-goals 延期清单。
 6. 订单过期自动关单 → 手册 3.3 P2，移出 Must（non-goals 延期清单）；W16 未支付订单由用户手动取消或保留 CREATED。
-7. mock 支付回调契约：callback 携带单调递增序号（`callback_seq` 落 `mock_payments` 表，SC-0903 建表实现）+ 演示签名（乱序防护依据，见 EX-O10）；细粒度字段与验签算法由 W8 的 SC-0903/SC-0904 细化。**支付模拟整体契约归手册第 4 章（`POST /api/v1/mock-payments` + `/callback`）与 SC-0903/SC-0904，不在三条故事范围内展开**；PRD 仅约束其不变量（INV-O4、EX-O9/O10）与幂等适用范围（0.2）。
+7. mock 支付回调契约：callback 携带单调递增序号（`callback_seq` 落 `mock_payments` 表，SC-0902 建表 `V7__payments.sql`、SC-0903/0904 实现）+ 演示签名（乱序防护依据，见 EX-O10）；细粒度字段与验签算法由 W8 的 SC-0903/SC-0904 细化。**支付模拟整体契约归手册第 4 章（`POST /api/v1/mock-payments` + `/callback`）与 SC-0903/SC-0904，不在三条故事范围内展开**；PRD 仅约束其不变量（INV-O4、EX-O9/O10）与幂等适用范围（0.2）。
 
 ## 2. 故事二：售后工单 — Must（模拟）
 
@@ -186,6 +207,7 @@ ALTER TABLE after_sale_tickets
 - EX-A5 同键重复提交 → 重放首次结果；同键不同摘要 → 409。
 - EX-A6 审核通过 → 工单 RESOLVED 与订单 REFUNDED 同事务；事务中途失败则两侧一起回滚，不出现“工单已结、订单还在 REFUND_PENDING”的半状态。
 - EX-A7 审核拒绝 → 工单 REJECTED 与订单回退 PAID 同事务；事务失败一起回滚，绝不出现"工单已拒、订单卡在 REFUND_PENDING"的死状态。
+- EX-A8 并发审核：两个 SUPPORT 同时审核同一工单 → 条件更新裁决仅一次生效，后来者 409 `AFTER_SALE_ALREADY_RESOLVED`，工单与订单状态不重复迁移。
 
 ### 2.5 验收用例
 
@@ -206,7 +228,8 @@ ALTER TABLE after_sale_tickets
 
 - USER：查本人订单详情与列表。
 - 手册第 4 章表规定订单详情权限 = `USER+本人/授权客服`：SUPPORT 可经对象级授权查看**关联了售后工单**的订单（见 0.1）；独立管理端订单查询接口 → Should（W16 后评估），一旦存在必须走独立管理端鉴权，不得复用用户接口越权。
-- 触发：`GET /api/v1/orders/{orderId}`（手册契约）、`GET /api/v1/orders?page=&size=`（**手册扩展接口**：第 4 章表无此路径，经评审决策保留，已登记 ADR-0001 变更记录；OpenAPI 随 SC-0303 补齐）。
+- 触发：`GET /api/v1/orders/{orderId}`（手册契约）、`GET /api/v1/orders?page=&size=`（**手册扩展接口**：第 4 章表无此路径，经评审决策保留，已登记 ADR-0001 变更记录；OpenAPI 随 SC-0304 补齐）。
+- 列表接口仅按当前登录账号过滤本人订单——SUPPORT/ADMIN 调用同样只返回本人订单（角色不放宽数据范围）；管理端订单查询走独立 Should 接口。
 
 ### 3.2 输入 / 输出
 
@@ -351,7 +374,7 @@ SC-0101 要求“先独立列业务规则，再允许 AI 检查遗漏”。用�
 
 1. 【P0-1】金额精度 `DECIMAL(12,2)` → `DECIMAL(18,2)`（0.3/1.3，手册第 0 章硬规则）。
 2. 【P0-2】对外 ID 策略拍板：`skuId`=`sku_code` 字符串业务码、`orderId`=字符串业务号，自增主键不暴露（0.3 新增；1.2/1.3/EX-O7 同步）；加锁顺序由 `skuId` 升序改 `sku_code` 字典序（INV-O2）。
-3. 【P0-3】订单列表接口拍板保留：3.1 显式标注"手册扩展接口"+ 登记 ADR-0001 变更记录 + OpenAPI 随 SC-0303 补齐。
+3. 【P0-3】订单列表接口拍板保留：3.1 显式标注"手册扩展接口"+ 登记 ADR-0001 变更记录 + OpenAPI 随 SC-0304 补齐。
 4. 【P0-4】支付模拟归属拍板：不加故事四；0.2 幂等条款改为"面向用户的写接口"，回调端点排除（幂等=条件更新+序号）；1.7 取舍 7 与 §6 Must 行标注契约归 SC-0903/0904。
 5. 【P1-1】RR 快照读陷阱：0.2 写明撞唯一约束后以当前读（FOR UPDATE）或新事务判定摘要。
 6. 【P1-2】response_ref 拍板：重放返回首次响应快照（对齐手册 3.4"同一业务结果"）。
@@ -364,3 +387,14 @@ SC-0101 要求“先独立列业务规则，再允许 AI 检查遗漏”。用�
 13. 【P2】INV-A7 审计落 `audit_log` 同事务；幂等键 UUID ≤64、`request_hash CHAR(64)`、endpoint 用路由模板（防同键不同资源绕过）；`callback_seq` 落 `mock_payments`；UTC/ISO8601 入 0.3；999/50 上限走应用配置；售后并发"先占唯一键后迁移状态"定错误码确定性；订单对外业务号防枚举；"W16 只预留接口"→"W16 不实现"；401/403 统一结构约束 `AuthenticationEntryPoint`（SC-0104）。
 14. 【P3】分页起始页 0 显式声明；non-goals 评测改"40 普通 + 20 攻击"（手册 5.5）；non-goals §2 补 Should 项交叉引用；状态行更新。
 15. 用户拍板确认（2026-11-03）：skuId=字符串业务码、列表接口保留+登记、支付模拟声明归属、重放=首次响应快照（四项均按推荐方案）。
+
+### 7.5 第五轮：复核勘误（2026-11-04，对照手册原文复核，P1×2 / P2×5 / P3×5）
+
+1. 【P1-1】OpenAPI 归属引用修正：SC-0303（实为商品上下架状态迁移，手册 629 行）→ **SC-0304**（生成 OpenAPI 文档，手册 633 行）；3.1、7.4 条 3、ADR-0001 变更记录三处统一。
+2. 【P1-2】取消契约判定矩阵（0.4）：消除"非 CREATED→409"与"重复调用幂等"的矛盾——本人 `CANCELLED` 走幂等 200（手册 304 行"重复调用幂等"），409 只用于 `PAID` 系不可取消状态；W10（SC-1002/SC-1003 取消与竞争测试）断言以此为准。
+3. 【P2-1】`mock_payments` 建表归属修正：建表 = **SC-0902**（`V7__payments.sql`，手册 847 行），SC-0903/0904 为实现（1.7 取舍 7）。
+4. 【P2-2】新增 0.3.1"对 3.1 概念表的受控扩展清单"：`orders.order_no/remark`、`order_items.title/image_snapshot`、`after_sale_tickets.type/active_order_key`、`mock_payments.callback_seq`，W2（SC-0202/0203）一次落全；`remark` 拍板落库而非删输入（保持对用户草稿的承诺）。
+5. 【P2-3】INV-O2 注明 SQL 内 `sku_id` 为内部数值主键、先按 `sku_code` 解析再扣减（防字符串误绑数值列）。
+6. 【P2-4】幂等重放仅复用业务响应体，`requestId` 以当前请求为准（0.2）。
+7. 【P2-5】幂等适用范围改"面向终端账户（USER/SUPPORT/ADMIN）的写接口"，覆盖 INV-A8 审核幂等（0.2）。
+8. 【P3】503 显式声明为团队决策（手册 4.1 未列）；0.1 的 401/403 结构补 `details?`；non-goals §2 移除 Should 行、注 1 改为统一在 PRD §6 跟踪；新增 EX-A8 并发审核 409 `AFTER_SALE_ALREADY_RESOLVED`；3.1 定死列表接口 SUPPORT/ADMIN 仅返回本人订单。
