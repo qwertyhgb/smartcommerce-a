@@ -29,7 +29,7 @@
 - **并发同键**：由 DB 唯一约束协调键的领用；插入撞唯一约束后，**必须以当前读（`SELECT ... FOR UPDATE`）或独立新事务读取 dedup 行判定摘要**——同事务先前的普通 SELECT 在 RR 隔离级别下是快照读，看不到对方刚提交的行，会导致误判 409 甚至重复建单。不得只靠内存 Map/锁保证跨实例正确性。
 - **首次失败后的重试**：幂等记录与业务写入在同一事务内提交，业务失败即回滚，同一键允许再次尝试并产生确定结果。
 - `requestId` 是链路追踪 ID（每个请求唯一，用于日志回放），与幂等键是两个概念，禁止混用。
-- 所有错误响应统一为 `{code, message, requestId, details?}`（`details` 可选，携带最小上下文如 `skuId`，不含敏感数据）；HTTP 语义按手册 4.1：401 未登录、403 无权限、404 不存在（越权可按威胁模型返回 404 减少枚举信息）、409 业务冲突、429 限流、500 服务端错误。内部异常不直接暴露。**400/422 判定（团队决策，手册 4.1 授权团队统一）**：本项目不启用 422——请求体解析失败与 Bean Validation 违规统一 400 `PARAM_INVALID`，业务语义拒绝走各自错误码（409/404 等）；EX-O6、EX-Q3 的 400 均由此统一。
+- 所有错误响应统一为 `{code, message, requestId, details?}`（`details` 可选，携带最小上下文如 `skuId`，不含敏感数据）；HTTP 语义按手册 4.1：401 未登录、403 无权限、404 不存在（越权可按威胁模型返回 404 减少枚举信息）、409 业务冲突、429 限流、500 服务端错误（另见上条 503 团队决策）。内部异常不直接暴露。**400/422 判定（团队决策，手册 4.1 授权团队统一）**：本项目不启用 422——请求体解析失败与 Bean Validation 违规统一 400 `PARAM_INVALID`，业务语义拒绝走各自错误码（409/404 等）；EX-O6、EX-Q3 的 400 均由此统一。
 
 ### 0.3 金额与数据
 
@@ -94,7 +94,7 @@ CREATED ──模拟支付回调(验签通过)──> PAID ──本人申请售
 
 ### 1.3 输出
 
-- 成功（201）：`{orderId, status: CREATED, totalAmount, currency: CNY}`（字段对齐手册 4.2 示例；金额序列化为字符串如 `"139.80"`，防 JS 浮点精度丢失）；总额 = Σ(数据库单价 × 数量)，`DECIMAL(18,2)`。`currency` 为 API DTO 字段（MVP 固定 CNY），**不落 `orders` 表**（手册 3.1 表无此字段）。`orderId` 为字符串业务号（0.3）。订单明细保存商品快照（名称/单价/图片，取下单瞬间，对应 `order_items.unit_price_snapshot`）。
+- 成功（201）：`{orderId, status: CREATED, totalAmount, currency: CNY}`（字段对齐手册 4.2 示例；金额序列化为字符串如 `"139.80"`，防 JS 浮点精度丢失）；总额 = Σ(数据库单价 × 数量)，`DECIMAL(18,2)`。`currency` 为 API DTO 字段（MVP 固定 CNY），**不落 `orders` 表**（手册 3.1 表无此字段）。`orderId` 为字符串业务号（0.3）。订单明细保存商品快照（名称/单价/图片，取下单瞬间）：单价对应 `order_items.unit_price_snapshot`，名称/图片对应 0.3.1 的 `title_snapshot/image_snapshot` 扩展列。
 - 订单查询所需的收货信息 = 虚构演示静态数据，不是用户输入、不建地址模块（见 1.7 取舍 5）。
 - 失败：统一错误码；不生成订单、不扣库存。
 
@@ -106,7 +106,7 @@ CREATED ──模拟支付回调(验签通过)──> PAID ──本人申请售
 ```sql
 UPDATE inventory
 SET available = available - #{quantity}
-WHERE sku_id = #{skuId} AND available >= #{quantity}
+WHERE sku_id = #{internalSkuId} AND available >= #{quantity}
 ```
 
 对请求中每个 SKU 逐项执行，**items 一律按 `sku_code` 字典序加锁**，保证并发事务全局加锁顺序一致、避免交叉持锁死锁；**在售校验与库存扣减必须在同一事务内以当前读判定**（先 `SELECT ... FOR UPDATE` 锁定商品行校验 `status='ON_SALE'` 再扣减，防并发下架的 TOCTOU 竞态导致"下架仍成交"，违反 EX-O2）；任一项 affected rows = 0 → 整单失败、已执行的扣减随事务全部回滚（多 SKU 场景即 SC-0806 “其中一项库存不足”，见 EX-O11；并发争抢与死锁场景纳入 SC-0806 测试清单）。
@@ -207,7 +207,7 @@ ALTER TABLE after_sale_tickets
 - EX-A5 同键重复提交 → 重放首次结果；同键不同摘要 → 409。
 - EX-A6 审核通过 → 工单 RESOLVED 与订单 REFUNDED 同事务；事务中途失败则两侧一起回滚，不出现“工单已结、订单还在 REFUND_PENDING”的半状态。
 - EX-A7 审核拒绝 → 工单 REJECTED 与订单回退 PAID 同事务；事务失败一起回滚，绝不出现"工单已拒、订单卡在 REFUND_PENDING"的死状态。
-- EX-A8 并发审核：两个 SUPPORT 同时审核同一工单 → 条件更新裁决仅一次生效，后来者 409 `AFTER_SALE_ALREADY_RESOLVED`，工单与订单状态不重复迁移。
+- EX-A8 并发审核：两个 SUPPORT 同时审核同一工单 → 条件更新裁决仅一次生效，后来者 409 `AFTER_SALE_ALREADY_REVIEWED`，工单与订单状态不重复迁移。
 
 ### 2.5 验收用例
 
@@ -403,4 +403,4 @@ SC-0101 要求“先独立列业务规则，再允许 AI 检查遗漏”。用�
 
 1. 【P1】0.3.1 建表落点修正：扩展列并非都随 W2 落库——`orders/order_items` 归 `V6__orders.sql`（SC-0802）、`mock_payments` 归 `V7__payments.sql`（SC-0902）、`after_sale_tickets` 归 `V8__after_sales.sql`（SC-1004），改为逐行标注迁移归属并同步 7.5 条 4（与 SC-0303 同类引用错误；四张表归属经手册 593/811/848/893 行核对，SC-0202 仅出 ERD、不建表）。
 2. 【P2】账本补录：补 `docs/progress/daily/2026-11-04.md`（第五轮修复当日漏记）、新增 2026-11-05 记录，STATUS 同步。
-3. 【P3×4 排队至 SC-0102 顺手改】EX-A8 错误码改 `AFTER_SALE_ALREADY_REVIEWED`（后来者可能遇 RESOLVED 或 REJECTED，原名不准确）；0.2 的 503 在 HTTP 枚举处补交叉引用；1.3 快照引用改 0.3.1；INV-O2 参数名改 `#{internalSkuId}`。
+3. 【P3×4 已单独落地（2026-11-05 `docs(prd)` 小提交；原计划随 SC-0102，为避免污染该工单提交边界而提前）】EX-A8 错误码改 `AFTER_SALE_ALREADY_REVIEWED`（后来者可能遇 RESOLVED 或 REJECTED，原名不准确；7.5 条 8 中的旧名保留为历史记录）；0.2 的 503 在 HTTP 枚举处补交叉引用；1.3 快照引用改 0.3.1（`title_snapshot/image_snapshot`）；INV-O2 参数名改 `#{internalSkuId}`。
