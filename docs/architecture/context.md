@@ -1,7 +1,7 @@
 # C4 Level 1：系统上下文与个人信息流向
 
 - 工单：SC-0102（W1，Must，1.5h）
-- 状态：待验收
+- 状态：已验收（2026-11-05）
 - 依据：`docs/plan/SmartCommerce_AI_v2_Development_Manual_238_Days.md` 第 2、3、4、5、9 章；`docs/prd/README.md` §0.1/§0.2/§0.3/§3.6/§4/§5；`docs/prd/non-goals.md`；`docs/adr/0000-technology-baseline.md`；`docs/adr/0001-mvp-scope.md`
 - 关联工单：SC-0104（统一错误契约）、SC-0105（Compose 凭据）、SC-1401~1407（Outbox）、SC-2101~2207（RAG）、SC-2301~2307（Tool 授权）
 
@@ -201,3 +201,4 @@ grep -c '^| I-' docs/architecture/context.md    # 期望输出 12
 | 日期 | 变更 | 依据 |
 |---|---|---|
 | 2026-11-05 | 初版：冻结 W16/W19+ 目标态信任边界、12 条跨系统调用、个人信息流向与红线 | SC-0102；手册第 2/3/4/5/9 章；PRD 已定稿版本；ADR-0000 / ADR-0001 |
+| 2026-11-05 | 验收通过：对照手册可验收条件逐项复核并复现证据命令，状态改「已验收」 | SC-0102 关单验收 |
