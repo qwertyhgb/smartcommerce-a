@@ -1,7 +1,7 @@
 # SmartCommerce AI 产品需求（PRD）
 
 - 工单：SC-0101（Must，1.5h）
-- 状态：已定稿（2026-11-03 定稿；2026-11-04 第五轮复核勘误已并入，修订记录见 §7.5）
+- 状态：已定稿（2026-11-03 定稿；2026-11-05 第六轮落点勘误已并入，修订记录见 §7.6）
 - 关联：`docs/adr/0001-mvp-scope.md`（W16 范围冻结）、开发手册第 0–6 章（重点：3.3 状态机、3.4 幂等、第 4 章 API 契约、5.4 工具授权）
 - 范围：三条核心用户故事 —— 下单、售后、订单查询。每条故事定义角色/触发、输入/输出、业务不变量、异常场景、验收用例，并明确订单写操作边界与 AI 边界
 - 约定：需求按 Must / Should / Could 标记；与 ADR-0001 冲突时以 ADR-0001 为准
@@ -38,18 +38,18 @@
 - **对外 ID 策略**：`skuId` = `products.sku_code`（字符串业务码）、`orderId` = 订单业务号（字符串，形如 `ord-xxx`），均对齐手册 4.2 示例；数据库自增主键不对外暴露（防顺序枚举）。内部关联（`order_items.sku_id` 等）落库用数值主键，由服务端经 `sku_code` 解析。
 - 表结构变更只走 Flyway；核心交易 SQL 用原生 MyBatis `#{}` 绑定；落库字段名对齐手册 3.1（如 `order_items.qty`、`after_sale_tickets.detail`），API DTO 字段名不受此约束。
 
-### 0.3.1 对手册 3.1 概念表的受控扩展清单（W2 建表依据）
+### 0.3.1 对手册 3.1 概念表的受控扩展清单（随各表 Flyway 迁移落库）
 
-手册 3.1 是"概念字段清单"（其 241 行明确非完整 DDL）。以下扩展列源自 PRD 已承诺的输入/输出，W2（SC-0202/SC-0203）建表时一次落全，避免返工：
+手册 3.1 是"概念字段清单"（其 241 行明确非完整 DDL）。以下扩展列源自 PRD 已承诺的输入/输出，**随各表自己的 Flyway 迁移落库**（迁移归属见末列；商品表 `V1__catalog.sql`（SC-0203）无扩展列），建表时对照本清单防漏列：
 
-| 表 | 扩展列 | PRD 依据 | 说明 |
-|---|---|---|---|
-| `orders` | `order_no` | 0.3 对外 ID 策略 | 字符串业务号 UNIQUE；自增 `id` 不对外 |
-| `orders` | `remark` | 1.2 输入 | VARCHAR(200) 可空；**落库而非删输入**（保持对用户草稿的承诺） |
-| `order_items` | `title_snapshot`, `image_snapshot` | 1.3 商品快照 | 取下单瞬间；快照语义不得改实时联查 |
-| `after_sale_tickets` | `type` | 2.2 输入 | MVP 仅 `REFUND_SIMULATED` |
-| `after_sale_tickets` | `active_order_key` | INV-A3 | STORED 生成列 + UNIQUE（NULL 不参与唯一性） |
-| `mock_payments` | `callback_seq` | 1.7 取舍 7 | 单调递增序号，SC-0902 建表 |
+| 表 | 扩展列 | PRD 依据 | 说明 | 迁移归属 |
+|---|---|---|---|---|
+| `orders` | `order_no` | 0.3 对外 ID 策略 | 字符串业务号 UNIQUE；自增 `id` 不对外 | `V6__orders.sql`（SC-0802） |
+| `orders` | `remark` | 1.2 输入 | VARCHAR(200) 可空；**落库而非删输入**（保持对用户草稿的承诺） | `V6__orders.sql`（SC-0802） |
+| `order_items` | `title_snapshot`, `image_snapshot` | 1.3 商品快照 | 取下单瞬间；快照语义不得改实时联查 | `V6__orders.sql`（SC-0802） |
+| `after_sale_tickets` | `type` | 2.2 输入 | MVP 仅 `REFUND_SIMULATED` | `V8__after_sales.sql`（SC-1004） |
+| `after_sale_tickets` | `active_order_key` | INV-A3 | STORED 生成列 + UNIQUE（NULL 不参与唯一性） | `V8__after_sales.sql`（SC-1004） |
+| `mock_payments` | `callback_seq` | 1.7 取舍 7 | 单调递增序号 | `V7__payments.sql`（SC-0902） |
 
 ### 0.4 订单状态机（全局）
 
@@ -393,8 +393,14 @@ SC-0101 要求“先独立列业务规则，再允许 AI 检查遗漏”。用�
 1. 【P1-1】OpenAPI 归属引用修正：SC-0303（实为商品上下架状态迁移，手册 629 行）→ **SC-0304**（生成 OpenAPI 文档，手册 633 行）；3.1、7.4 条 3、ADR-0001 变更记录三处统一。
 2. 【P1-2】取消契约判定矩阵（0.4）：消除"非 CREATED→409"与"重复调用幂等"的矛盾——本人 `CANCELLED` 走幂等 200（手册 304 行"重复调用幂等"），409 只用于 `PAID` 系不可取消状态；W10（SC-1002/SC-1003 取消与竞争测试）断言以此为准。
 3. 【P2-1】`mock_payments` 建表归属修正：建表 = **SC-0902**（`V7__payments.sql`，手册 847 行），SC-0903/0904 为实现（1.7 取舍 7）。
-4. 【P2-2】新增 0.3.1"对 3.1 概念表的受控扩展清单"：`orders.order_no/remark`、`order_items.title/image_snapshot`、`after_sale_tickets.type/active_order_key`、`mock_payments.callback_seq`，W2（SC-0202/0203）一次落全；`remark` 拍板落库而非删输入（保持对用户草稿的承诺）。
+4. 【P2-2】新增 0.3.1"对 3.1 概念表的受控扩展清单"：`orders.order_no/remark`、`order_items.title/image_snapshot`、`after_sale_tickets.type/active_order_key`、`mock_payments.callback_seq`，随各表 Flyway 迁移落库（V6=SC-0802、V7=SC-0902、V8=SC-1004）；`remark` 拍板落库而非删输入（保持对用户草稿的承诺）。
 5. 【P2-3】INV-O2 注明 SQL 内 `sku_id` 为内部数值主键、先按 `sku_code` 解析再扣减（防字符串误绑数值列）。
 6. 【P2-4】幂等重放仅复用业务响应体，`requestId` 以当前请求为准（0.2）。
 7. 【P2-5】幂等适用范围改"面向终端账户（USER/SUPPORT/ADMIN）的写接口"，覆盖 INV-A8 审核幂等（0.2）。
 8. 【P3】503 显式声明为团队决策（手册 4.1 未列）；0.1 的 401/403 结构补 `details?`；non-goals §2 移除 Should 行、注 1 改为统一在 PRD §6 跟踪；新增 EX-A8 并发审核 409 `AFTER_SALE_ALREADY_RESOLVED`；3.1 定死列表接口 SUPPORT/ADMIN 仅返回本人订单。
+
+### 7.6 第六轮：落点勘误与账本补录（2026-11-05）
+
+1. 【P1】0.3.1 建表落点修正：扩展列并非都随 W2 落库——`orders/order_items` 归 `V6__orders.sql`（SC-0802）、`mock_payments` 归 `V7__payments.sql`（SC-0902）、`after_sale_tickets` 归 `V8__after_sales.sql`（SC-1004），改为逐行标注迁移归属并同步 7.5 条 4（与 SC-0303 同类引用错误；四张表归属经手册 593/811/848/893 行核对，SC-0202 仅出 ERD、不建表）。
+2. 【P2】账本补录：补 `docs/progress/daily/2026-11-04.md`（第五轮修复当日漏记）、新增 2026-11-05 记录，STATUS 同步。
+3. 【P3×4 排队至 SC-0102 顺手改】EX-A8 错误码改 `AFTER_SALE_ALREADY_REVIEWED`（后来者可能遇 RESOLVED 或 REJECTED，原名不准确）；0.2 的 503 在 HTTP 枚举处补交叉引用；1.3 快照引用改 0.3.1；INV-O2 参数名改 `#{internalSkuId}`。
