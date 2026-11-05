@@ -7,7 +7,7 @@
 - 阶段：W1 进行中（2026-11-02 ~ 11-08）
 - 当前工单：无（SC-0101 已于 11-03 完成）
 - 下一工单：SC-0102（2026-11-03，Must，1.5h）C4 上下文图与个人信息流向图
-- 最近完成：SC-0101 PRD 定稿 + 复核勘误闭环（交付 `fa61ce7`，勘误 `64c78a8`、`54a4fc9`）
+- 最近完成：SC-0101 PRD 定稿 + 复核勘误闭环（交付 `fa61ce7`，勘误 `64c78a8`、`54a4fc9`、`1fc072c`）
 - 远程仓库：https://github.com/qwertyhgb/smartcommerce-a （main）
 - 账本：`docs/progress/tickets.csv`（238 行，18 列，1 DONE / 237 TODO）
 - 今日记录：`docs/progress/daily/2026-11-05.md`（含 11-04 补录）
