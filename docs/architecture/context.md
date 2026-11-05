@@ -41,7 +41,7 @@ flowchart TB
     end
 
     subgraph B["信任域 B：应用（可信核心）"]
-        SYS["SmartCommerce AI<br/>Java 21 / Spring Boot 4.1.2 模块化单体<br/>auth catalog cart order inventory<br/>payment support notification knowledge ai"]
+        SYS["SmartCommerce AI<br/>Java 21 / Spring Boot 4.1.2 模块化单体<br/>common auth catalog cart order inventory<br/>payment support notification knowledge ai"]
         subgraph INFRA["同域数据基础设施"]
             MY["MySQL 8.4<br/>唯一真值 + Outbox"]
             RD["Redis 7<br/>cache-aside，可丢失"]
@@ -116,6 +116,7 @@ flowchart LR
     T2 --> WL
     WL --> LLM2
     QD2 --> LLM2
+    P4 -->|"用户问题文本（I-10 载荷，自由文本不承诺完全清除）"| LLM2
     CTX --> LOG
 ```
 
@@ -125,7 +126,7 @@ flowchart LR
 
 | 类别 | 具体数据 | 落点 | 保护措施 |
 |---|---|---|---|
-| 账号类 | email、口令（仅存 `password_hash`）、role | `users` / `roles` / `user_roles` | BCrypt/Argon2 慢哈希；错误响应不泄露账号是否存在之外的信息 |
+| 账号类 | email、口令（仅存 `password_hash`）、role | `users` / `roles` / `user_roles` | BCrypt/Argon2 慢哈希；登录失败不区分「账号不存在」与「口令错误」，错误响应不泄露账号存在性 |
 | 交易类 | items、`remark`、价格/商品快照、金额、库存流水 | `orders` / `order_items` / `inventory_ledger` / `request_dedup` | 服务端算价；`DECIMAL(18,2)`；`Idempotency-Key` 三元组唯一；对象级归属校验 |
 | 售后类 | 工单 `detail`、`type`、`active_order_key` | `after_sale_tickets` | SUPPORT/ADMIN 审核；USER 不可自行完结 |
 | 会话类 | AI 会话、用户问题文本、AI 草稿 | `ai_conversations` / `ai_suggestions` | `expires_at` 保留期；草稿经人工审核才成为正式回复 |
@@ -202,3 +203,4 @@ grep -c '^| I-' docs/architecture/context.md    # 期望输出 12
 |---|---|---|
 | 2026-11-05 | 初版：冻结 W16/W19+ 目标态信任边界、12 条跨系统调用、个人信息流向与红线 | SC-0102；手册第 2/3/4/5/9 章；PRD 已定稿版本；ADR-0000 / ADR-0001 |
 | 2026-11-05 | 验收通过：对照手册可验收条件逐项复核并复现证据命令，状态改「已验收」 | SC-0102 关单验收 |
+| 2026-11-05 | 复核修订：§4 补「用户问题文本 → LLM」出域边（对齐 I-10 载荷清单）；§3 模块清单补 `common`（对齐手册 2.3 目录约定）；§4 账号类措辞消歧为「登录失败不区分账号不存在与口令错误，不泄露账号存在性」 | 验收后复核意见（2026-11-05） |

@@ -10,7 +10,7 @@
 - 最近完成：SC-0102 C4 上下文图与个人信息流向图（交付 `569802b` / 账本 `708fb8a` / 验收 `6f8817b`）；SC-0101 PRD 定稿 + 复核勘误闭环（`fa61ce7`，勘误 `64c78a8`、`54a4fc9`、`1fc072c`）
 - 远程仓库：https://github.com/qwertyhgb/smartcommerce-a （main）
 - 账本：`docs/progress/tickets.csv`（238 行，18 列，2 DONE / 236 TODO）
-- 今日记录：`docs/progress/daily/2026-11-05.md`（含 11-04 补录、SC-0102 关单、验收与追溯链补全）
+- 今日记录：`docs/progress/daily/2026-11-05.md`（含 11-04 补录、SC-0102 关单、验收、追溯链补全与复核修订）
 - 阻塞：无
 
 ## 环境
