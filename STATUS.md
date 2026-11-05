@@ -5,12 +5,12 @@
 ## 当前
 
 - 阶段：W1 进行中（2026-11-02 ~ 11-08）
-- 当前工单：无（SC-0102 已于 11-05 完成并通过验收）
-- 下一工单：SC-0103（计划 2026-11-04，Must，1.5h）Java 21 模块化单体仓库与版本矩阵
-- 最近完成：SC-0102 C4 上下文图与个人信息流向图（交付 `569802b` / 账本 `708fb8a` / 验收 `6f8817b`）；SC-0101 PRD 定稿 + 复核勘误闭环（`fa61ce7`，勘误 `64c78a8`、`54a4fc9`、`1fc072c`）
+- 当前工单：无（SC-0103 已于 11-05 完成并关单）
+- 下一工单：SC-0104（计划 2026-11-05，Must，1.5h）统一错误契约、全局异常处理与 requestId
+- 最近完成：SC-0103 工程骨架与版本矩阵（账本修正 + 全新工作目录验证，交付 `8d2f48d`）；SC-0102 C4 上下文图与个人信息流向图（交付 `569802b` / 账本 `708fb8a` / 验收 `6f8817b` / 追溯链 `eb8401d` / 修订 `a0b4cda`）；SC-0101 PRD 定稿 + 复核勘误闭环（`fa61ce7`）
 - 远程仓库：https://github.com/qwertyhgb/smartcommerce-a （main）
-- 账本：`docs/progress/tickets.csv`（238 行，18 列，2 DONE / 236 TODO）
-- 今日记录：`docs/progress/daily/2026-11-05.md`（含 11-04 补录、SC-0102 关单、验收、追溯链补全与复核修订）
+- 账本：`docs/progress/tickets.csv`（238 行，18 列，3 DONE / 235 TODO）
+- 今日记录：`docs/progress/daily/2026-11-05.md`（含 11-04 补录、SC-0102 关单验收与修订、SC-0103 关单）
 - 阻塞：无
 
 ## 环境
@@ -33,5 +33,5 @@
 
 ## 下一步
 
-1. SC-0103：Java 21 模块化单体仓库与版本矩阵（骨架与版本矩阵已于 10-29 落地，先按验收标准复核账本与代码是否一致）
-2. 每张工单按 AGENTS.md 更新 STATUS/daily/CSV 并提交；周复盘时把 CSV 同步到 Excel 看板
+1. SC-0104：统一错误契约、全局异常处理和 requestId（`common/api + docs/api/error-codes.md`）
+2. 每张工单按 AGENTS.md 更新 STATUS/daily/CSV 并提交；周复盘时把 CSV 同步到 Excel 看板（含 SC-0102/SC-0103/SC-0105 已落地待同步项）
