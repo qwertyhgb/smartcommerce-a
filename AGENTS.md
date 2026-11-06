@@ -158,6 +158,7 @@ docs(adr): SC-0201 record catalog model decision
 | 进度追踪表 | `docs/plan/SmartCommerce_AI_v2_238_Day_Project_Tracker.xlsx` |
 | 版本基线 | `docs/adr/0000-technology-baseline.md` |
 | MVP 范围 | `docs/adr/0001-mvp-scope.md` |
+| 错误契约 | `docs/api/error-codes.md` |
 | 当前状态 | `STATUS.md` |
 | 工单账本 | `docs/progress/tickets.csv` |
 | 每日记录 | `docs/progress/daily/` |
